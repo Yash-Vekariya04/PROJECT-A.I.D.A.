@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>A.I.D.A - Avatar Interface</title>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.3.2/pixi.min.js"></script>
+    
+    <script src="https://cubism.live2d.com/sdk-web/cubismcore/live2dcubismcore.min.js"></script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/pixi-live2d-display@0.4.0/dist/cubism4.min.js"></script>
+
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            /* A dark, soothing background perfect for your coding videos */
+            background-color: #1e1e2e; 
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+            font-family: monospace;
+            color: #a6accd;
+        }
+        #system-log {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            font-size: 14px;
+        }
+        canvas {
+            /* Gives the rendering stage a clean boundary */
+            border-radius: 12px;
+            box-shadow: 0px 10px 40px rgba(0, 0, 0, 0.4);
+            background-color: transparent;
+        }
+        /* The Voice HUD UI */
+        #hud {
+            position: absolute;
+            bottom: 40px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            z-index: 10;
+        }
+        #mic-btn {
+            background-color: #2a2a35;
+            color: #a6accd;
+            border: 2px solid #4a4a5e;
+            border-radius: 50px;
+            padding: 15px 30px;
+            font-size: 16px;
+            font-family: monospace;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        #mic-btn:hover {
+            border-color: #82aaff;
+            color: #82aaff;
+            box-shadow: 0 0 15px rgba(130, 170, 255, 0.3);
+        }
+        #mic-btn.listening {
+            background-color: #82aaff;
+            color: #1e1e2e;
+            border-color: #82aaff;
+            box-shadow: 0 0 20px rgba(130, 170, 255, 0.6);
+        }
+        #user-transcript {
+            font-size: 14px;
+            color: #82aaff;
+            opacity: 0.8;
+            height: 20px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="system-log">Initializing Stage...</div>
+    <canvas id="live2d-canvas"></canvas>
+    <div id="hud">
+        <div id="user-transcript">System Standby...</div>
+        <button id="mic-btn">Engage Comms Link</button>
+    </div>
+
+    <script>
+        // The URL pointing to the Live2D Stunt Double
+        const MODEL_URL = "https://cdn.jsdelivr.net/gh/guansss/pixi-live2d-display/test/assets/haru/haru_greeter_t03.model3.json";
+
+        async function bootVisualEngine() {
+            const logger = document.getElementById('system-log');
+            logger.innerText = "[SYSTEM] Booting PixiJS Engine...";
+
+            // 1. Setup the HTML5 Canvas
+            const app = new PIXI.Application({
+                view: document.getElementById('live2d-canvas'),
+                width: 600,
+                height: 700,
+                backgroundAlpha: 0, // Keeps the background completely transparent
+                resolution: window.devicePixelRatio || 1,
+                autoStart: true
+            });
+
+            const { Live2DModel } = PIXI.live2d;
+
+            try {
+                logger.innerText = "[SYSTEM] Downloading Stunt Double Mesh...";
+                
+                // 2. Load the model via the CDN
+                const model = await Live2DModel.from(MODEL_URL);
+                
+                // 3. Position the model on the stage
+                // You may need to tweak these numbers when you drop the custom Aida model in
+                model.scale.set(0.1); 
+                model.x = (app.screen.width - model.width) / 2;
+                model.y = (app.screen.height - model.height) / 2 + 10;
+
+                app.stage.addChild(model);
+                logger.innerText = "[SYSTEM] A.I.D.A Avatar Online. (Placeholder)";
+
+                // 4. The Interaction Physics
+                // This mathematical function calculates the mouse vector and moves her head
+                app.view.addEventListener('pointermove', (event) => {
+                    // Convert raw mouse coordinates into the canvas coordinate space
+                    const rect = app.view.getBoundingClientRect();
+                    const x = event.clientX - rect.left;
+                    const y = event.clientY - rect.top;
+                    
+                    // Trigger the Live2D head-turning parameters
+                    model.focus(x, y);
+                });
+
+                // Optional: Make her trigger a random built-in expression on click
+                app.view.addEventListener('click', () => {
+                    model.internalModel.motionManager.expressionManager.setRandomExpression();
+                });
+
+            } catch (error) {
+                logger.innerText = `[ERROR] Failed to load model: ${error.message}`;
+                console.error(error);
+            }
+        }
+
+        // Boot the sequence
+        bootVisualEngine();
+
+        // Connect the WebSocket to the Python server
+        const ws = new WebSocket("ws://localhost:8000/ws/aida");
+
+        // --- PART 3: VOICE RECOGNITION (EARS) ---
+        
+        const micBtn = document.getElementById('mic-btn');
+        const transcriptDisplay = document.getElementById('user-transcript');
+
+        // Initialize the browser's native speech recognition engine
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        
+        if (SpeechRecognition) {
+            const recognition = new SpeechRecognition();
+            recognition.continuous = false; // Stops listening after you finish a sentence
+            recognition.interimResults = true; // Shows words as you speak them
+            recognition.lang = 'en-US';
+
+            let isListening = false;
+
+            // When you click the button
+            micBtn.addEventListener('click', () => {
+                if (!isListening) {
+                    recognition.start();
+                } else {
+                    recognition.stop();
+                }
+            });
+
+            // Triggered when the mic turns on
+            recognition.onstart = function() {
+                isListening = true;
+                micBtn.classList.add('listening');
+                micBtn.innerText = "Listening...";
+                transcriptDisplay.innerText = "A.I.D.A. is listening...";
+            };
+
+            // Triggered as you speak
+            // Triggered as you speak
+            recognition.onresult = function(event) {
+                // Get the most recent speech result
+                const currentResult = event.results[event.resultIndex];
+                const transcript = currentResult[0].transcript;
+                
+                transcriptDisplay.innerText = `You: "${transcript}"`;
+                
+                // If the browser confirms you are done speaking this sentence
+                if (currentResult.isFinal) {
+                    console.log("[USER SPOKE]:", transcript);
+                    
+                    // Check if WebSocket is actually open before sending
+                    if (ws.readyState === WebSocket.OPEN) {
+                        ws.send(transcript);
+                        transcriptDisplay.innerText += " (Transmitting...)";
+                    } else {
+                        transcriptDisplay.innerText = "Error: Brain Disconnected.";
+                        console.error("WebSocket is not open!");
+                    }
+                }
+            };
+
+            // Triggered when mic turns off
+            recognition.onend = function() {
+                isListening = false;
+                micBtn.classList.remove('listening');
+                micBtn.innerText = "Engage Comms Link";
+            };
+            
+            recognition.onerror = function(event) {
+                transcriptDisplay.innerText = `Mic Error: ${event.error}`;
+                isListening = false;
+                micBtn.classList.remove('listening');
+                micBtn.innerText = "Engage Comms Link";
+            };
+            
+        } else {
+            micBtn.innerText = "Microphone API Not Supported";
+            transcriptDisplay.innerText = "Please use Chrome or Edge.";
+        }
+
+        ws.onmessage = async function(event) {
+            // 1. Unpack the JSON payload from Python
+            const payload = JSON.parse(event.data);
+            
+            console.log(`[AIDA TEXT]: ${payload.text}`);
+            console.log(`[AIDA MOOD]: ${payload.mood}`);
+            
+            // 2. Route the mood to the visual engine (for later lip-sync/expressions)
+            // changeExpression(payload.mood); 
+            
+            // 3. Reconstruct the audio and play it
+            if (payload.audio_data) {
+                const audio = new Audio("data:audio/mp3;base64," + payload.audio_data);
+                
+                // Browsers block audio until the user interacts with the page once,
+                // so make sure you've clicked on the browser window before this triggers!
+                await audio.play();
+            }
+        };
+    </script>
+
+</body>
+</html>
