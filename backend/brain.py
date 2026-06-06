@@ -58,7 +58,7 @@ class AidaBrain:
 if __name__ == "__main__":
     # 1. You must download a .gguf model file and put it in your 'models' folder
     # Example: "Phi-3-mini-4k-instruct-q4.gguf" (A highly capable, tiny model)
-    MODEL_FILE = r"C:\Users\yashv\OneDrive\Desktop\Yash\Dev\ML\FRIDAY\FRIDAY\backend\models\Meta-Llama-3-8B-Instruct.Q4_K_S.gguf" 
+    MODEL_FILE = #ModelPath 
     
     # Define F.R.I.D.A.Y.'s personality and tools
     FRIDAY_PROMPT = """You are F.R.I.D.A.Y., an advanced AI assistant. 
